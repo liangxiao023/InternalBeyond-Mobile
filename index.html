@@ -3954,10 +3954,10 @@ body.theme-infernal #conv .cv-input.glass,body.theme-infernal #conv .cv-head.gla
 
 <div class="sheet" id="sheet-mcp">
   <h3 id="mcpe-title">添加 MCP 服务器</h3>
-  <div class="f-group"><label>别名 <span class="lb-note">（字母数字，AI 以 mcp.别名.工具名 调用）</span></label><input id="mcpe-alias" maxlength="24" placeholder="如 amap"></div>
+  <div class="f-group"><label>别名 <span class="lb-note">（字母数字，AI 以 mcp.别名.工具名 调用）</span></label><input id="mcpe-alias" maxlength="24" placeholder="可留空，自动起名"></div>
   <div class="f-group"><label>服务器 URL <span class="lb-note">（Streamable HTTP）</span></label><input id="mcpe-url" placeholder="https://…/mcp"></div>
   <div class="f-group"><label>令牌 Token <span class="lb-note">（选填，随请求以 Authorization: Bearer 发送）</span></label><input id="mcpe-token" placeholder="官方开放平台领取的个人令牌"></div><!-- v131 需求③：麦当劳 / 瑞幸等官方 MCP 均以 Bearer Token 鉴权 -->
-  <p class="hint" style="margin-top:0">保存后点「连接」拉取工具列表。需要服务器允许浏览器跨域访问（CORS）。</p>
+  <p class="hint" style="margin-top:0">别名留空会按网址自动起名，保存后自动连接拉取工具。需要服务器允许浏览器跨域访问（CORS）。</p>
   <div class="sheet-btns"><button class="btn danger" id="mcpe-del" style="display:none">删除</button><button class="btn" data-close="1">取消</button><button class="btn primary" id="mcpe-save">保存</button></div>
 </div>
 
@@ -12248,22 +12248,36 @@ function openMcpEdit(sv){
   openSheet('sheet-mcp');
 }
 $('mcpe-save').addEventListener('click',async()=>{
-  const alias=$('mcpe-alias').value.trim().replace(/[^\w-]/g,'');
+  let alias=$('mcpe-alias').value.trim().replace(/[^\w-]/g,'');
   const url=$('mcpe-url').value.trim();
-  const token=$('mcpe-token').value.trim();/* v131 需求③ */
-  if(!alias||!url){toast('别名和 URL 都要填');return}
+  const token=$('mcpe-token').value.trim();
+  if(!url){toast('URL 要填');return}
+  /* ib-custom：别名留空＝按网址自动起名；保存即自动连接拉取工具 */
+  if(!alias){
+    let host='';try{host=new URL(url).hostname}catch(e){}
+    host=host.replace(/^www\./,'').split('.')[0].replace(/[^\w-]/g,'').slice(0,12)||'mcp';
+    alias=host;
+    await loadMP();
+    let n=2;while(_mp.mcp.servers.some(function(x){return x.alias===alias})){alias=host+'-'+n;n++}
+    $('mcpe-alias').value=alias;
+  }
   await loadMP();
-  const dup=_mp.mcp.servers.findIndex(s=>s.alias===alias);
+  const dup=_mp.mcp.servers.findIndex(function(x){return x.alias===alias});
+  let sv;
   if(_mcpEditIdx===-1){
     if(dup!==-1){toast('别名已存在');return}
-    _mp.mcp.servers.push({alias:alias,url:url,token:token,enabled:true,tools:[],status:''});
+    sv={alias:alias,url:url,token:token,enabled:true,tools:[],status:''};
+    _mp.mcp.servers.push(sv);
   }else{
     if(dup!==-1&&dup!==_mcpEditIdx){toast('别名已存在');return}
-    const sv=_mp.mcp.servers[_mcpEditIdx];
+    sv=_mp.mcp.servers[_mcpEditIdx];
     if(sv.url!==url){sv.tools=[];sv.status=''}
     sv.alias=alias;sv.url=url;sv.token=token;
   }
-  await saveMP();closeSheets();drawMcpList();toast('已保存，点「连接」拉取工具');
+  await saveMP();closeSheets();drawMcpList();
+  toast('已保存，正在连接…');
+  try{const cnt=await IBMCP.connect(sv);_mcpFold[sv.alias]=true;await saveMP();drawMcpList();toast('已连接，拉到 '+cnt+' 个工具')}
+  catch(err){sv.status='bad';await saveMP();drawMcpList();toast('连接失败：'+String((err&&err.message)||err).slice(0,80))}
 });
 $('mcpe-del').addEventListener('click',async()=>{
   if(_mcpEditIdx===-1)return;
