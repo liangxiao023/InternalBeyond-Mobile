@@ -3582,6 +3582,41 @@ self.addEventListener(&#x27;fetch&#x27;,function(e){
   </div>
 </div>
 
+
+<style id="ib-custom-style">/* ═══ ib-custom：聊天定制（iMessage 细长气泡 + 紧凑输入栏 + 去毛玻璃卡顿）═══ */
+/* --- 输入栏：按钮收窄，输入框还给用户 --- */
+#conv .cv-input{gap:5px;margin:6px 8px calc(8px + var(--sab));padding:5px}
+#conv .cv-mini,#conv .send-btn{width:34px;height:34px;flex:none}
+#conv .cv-mini svg{width:16px;height:16px}
+#conv .send-btn svg{width:15px;height:15px}
+#conv #cv-ta{padding:6px 11px;font-size:0.95rem;border-radius:15px;min-width:0}
+#conv #cv-kao{display:none!important}
+/* --- 气泡：iMessage 细长条 --- */
+#cv-msgs .m{max-width:78%;padding:7px 13px;border-radius:17px;font-size:0.92rem;line-height:1.45;box-shadow:none!important}
+#cv-msgs .m.ai{background:#E9E9EB!important;border:none!important;color:#000!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+#cv-msgs .m.user{background:#0A84FF!important;border:none!important;color:#fff!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+body.theme-infernal #cv-msgs .m.ai{background:#26262A!important;color:#E5E5EA!important}
+body.theme-infernal #cv-msgs .m.user{background:#0A84FF!important;color:#fff!important}
+/* 尾角收平改成 iMessage 式小尖角 */
+#cv-msgs .m.ai{border-bottom-left-radius:5px}
+#cv-msgs .m.user{border-bottom-right-radius:5px}
+/* --- 行距紧凑：连续消息贴起来 --- */
+#cv-msgs .mrow{margin-bottom:2px}
+#cv-msgs .mrow.cont{margin-top:0}
+#cv-msgs .mrow-head{margin-bottom:2px}
+/* 头像列不再撑宽气泡换行 */
+#cv-msgs .m-body>.m{max-width:min(78%,calc(100% - 34px))}
+#cv-msgs .mrow:not(.hasava) .m-body .m-col,#cv-msgs .mrow:not(.hasava) .m-body>.m{max-width:78%}
+/* --- 修打字卡顿：关掉输入栏/顶栏的 backdrop-filter 重绘 --- */
+#conv .cv-input.glass::before,#conv .cv-head.glass::before,#cv-selbar.glass::before{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+#conv .cv-input.glass,#conv .cv-head.glass{background:rgba(250,250,252,0.96)}
+body.theme-infernal #conv .cv-input.glass,body.theme-infernal #conv .cv-head.glass{background:rgba(20,22,30,0.96)}
+/* 气泡材质统一改实色后，动态生成的玻璃/磨砂规则全部失效 */
+#cv-msgs .m,#cv-msgs .m.bs-msg .bs-seg{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+/* --- 时间戳更轻 --- */
+#cv-msgs .mrow-head .r-time{font-size:0.62rem;opacity:0.75}
+</style>
+
 <!-- ══ 设置（三区滑动）══ -->
 <div class="sub" id="sub-set">
   <div class="sub-head glass">
@@ -8095,6 +8130,13 @@ function _msgActionsLegacy(m,el){
 const ta=document.getElementById('cv-ta');
 ta.addEventListener('input',autoGrow);
 ta.addEventListener('input',function(){window._ibLastType=Date.now()});
+/* ib-custom: Enter 直接发送；Shift+Enter 换行；输入法组词态回车不触发 */
+ta.addEventListener('keydown',function(e){
+  if(e.key!=='Enter'||e.shiftKey)return;
+  if(e.isComposing||e.keyCode===229)return;
+  e.preventDefault();
+  if(ta.value.trim()||_pendImgs.length||_pendFiles.length||window._ibPendStk)sendMsg(true);
+});
 function autoGrow(){ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,110)+'px'}
 
 /* ── ＋ 附图（compressImg → m.images，随请求发给视觉模型；与电脑版消息字段同构）── */
@@ -8121,7 +8163,8 @@ function drawAttach(){
 document.getElementById('cv-plus').addEventListener('click',()=>{
   actionSheet([
     {label:'发送图片',fn:()=>{if(_pendImgs.length>=4){toast('一次最多 4 张');return}document.getElementById('chat-img-file').click()}},
-    {label:'发送文件（文本类）',fn:()=>{if(_pendFiles.length>=4){toast('一次最多 4 个文件');return}document.getElementById('chat-doc-file').click()}}
+    {label:'发送文件（文本类）',fn:()=>{if(_pendFiles.length>=4){toast('一次最多 4 个文件');return}document.getElementById('chat-doc-file').click()}},
+    {label:'颜文字 / 表情包',fn:()=>{const k=document.getElementById('cv-kao');if(k)k.click();else toast('表情包还没加载好，再试一次')}}
   ]);
 });
 document.getElementById('chat-doc-file').addEventListener('change',async e=>{
@@ -9050,9 +9093,11 @@ function sendBtnState(sending){
 document.getElementById('cv-send').addEventListener('click',()=>{
   const _k=_convKey(_activeCfg);
   if(_sendKeys.has(_k)){const c=_acMap[_k];if(c)c.abort();return}
+  const _hasPend=ta.value.trim()||_pendImgs.length||_pendFiles.length||window._ibPendStk;
+  if(!_hasPend){if(window.__ibTriggerReply)window.__ibTriggerReply();return}
   sendMsg();
 });
-async function sendMsg(){
+async function sendMsg(silent){
   const cfg=_activeCfg;if(!cfg)return;
   if(_sendKeys.has(_convKey(cfg)))return;
   const t=ta.value.trim();
@@ -9075,8 +9120,14 @@ async function sendMsg(){
   _pendImgs=[];_pendFiles=[];window._ibPendStk=null;drawAttach();
   setQuote(null);
   pinBottom();
-  if(cfg._group)genReplyGroup(cfg);else genReply(cfg);
+  if(!silent){if(cfg._group)genReplyGroup(cfg);else genReply(cfg);}
 }
+/* ib-custom: 空输入时按发送键＝只叫 TA 回复上一条 */
+window.__ibTriggerReply=function(){
+  const c=_activeCfg;if(!c)return;
+  if(_sendKeys.has(_convKey(c)))return;
+  if(c._group)genReplyGroup(c);else genReply(c);
+};
 
 async function getSummarySettingsM(){
   try{const r=await dbGet('apiSettings','summarySettings');return r||{enabled:false,keepCount:6,summaryWindow:60,summaryApiId:''}}
@@ -24394,5 +24445,90 @@ function boot(){(async function(){try{if(typeof loadMP==='function')await loadMP
   var sw=document.getElementById('ui-reduce');if(sw)sw.addEventListener('click',function(){setTimeout(apply,60)})})()}
 window.IBFx={apply:apply,set:set,cur:cur};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else setTimeout(boot,0)})();
 </script>
+
+<script id="ib-customfont-pack">
+/* ═══ ib-custom：自定义字体 ═══ 上传一个 ttf/otf/woff/woff2，全站正文与标题生效；字体文件存在独立数据库 IBCustomFontDB，不进 IB 备份 ═══ */
+(function(){
+  'use strict';
+  var DB='ibCustomFontDB',STORE='fonts',KEY='global';
+  var _url=null,_dbP=null;
+  function db(){
+    if(_dbP)return _dbP;
+    _dbP=new Promise(function(res,rej){
+      var r=indexedDB.open(DB,1);
+      r.onupgradeneeded=function(){try{r.result.createObjectStore(STORE)}catch(e){}};
+      r.onsuccess=function(){res(r.result)};
+      r.onerror=function(){rej(r.error)};
+    });
+    return _dbP;
+  }
+  function tx(mode,fn){return db().then(function(d){return new Promise(function(res,rej){
+    var t=d.transaction(STORE,mode),rq=fn(t.objectStore(STORE));
+    t.oncomplete=function(){res(rq&&rq.result)};
+    t.onerror=t.onabort=function(){rej(t.error||new Error('idb'))};
+  })})}
+  function getFont(){return tx('readonly',function(st){return st.get(KEY)})}
+  function putFont(rec){return tx('readwrite',function(st){return st.put(rec,KEY)})}
+  function delFont(){return tx('readwrite',function(st){return st.delete(KEY)})}
+  function apply(){
+    return getFont().then(function(rec){
+      var st=document.getElementById('ib-cfont-style');
+      if(!rec){
+        if(st)st.textContent='';
+        try{if(_url){URL.revokeObjectURL(_url);_url=null}}catch(e){}
+        return null;
+      }
+      try{if(_url){URL.revokeObjectURL(_url);_url=null}}catch(e){}
+      _url=URL.createObjectURL(rec.blob);
+      var css="@font-face{font-family:'IBCustomFont';src:url('"+_url+"');font-display:swap;font-weight:normal;font-style:normal}"
+        +"body{font-family:'IBCustomFont','Noto Sans SC','PingFang SC','Microsoft YaHei',system-ui,sans-serif!important}"
+        +":root{--disp:'IBCustomFont','Raleway','Noto Sans SC',sans-serif!important}";
+      if(!st){st=document.createElement('style');st.id='ib-cfont-style'}
+      st.textContent=css;
+      document.body.appendChild(st);/* 放 body 末尾，压过运行时插到 head 的动态样式 */
+      return rec;
+    });
+  }
+  function status(){
+    getFont().then(function(rec){
+      var el=document.getElementById('ib-cfont-name');
+      if(el)el.textContent=rec?('当前：'+rec.name):'当前：默认字体（未上传）';
+    }).catch(function(){});
+  }
+  function mount(){
+    var host=document.getElementById('sec-visual-text');
+    if(!host||document.getElementById('ib-cfont-card'))return;
+    var card=document.createElement('div');
+    card.className='set-card';card.id='ib-cfont-card';
+    card.style.marginTop='12px';
+    card.innerHTML=
+      '<div class="sc-t">Font — 自定义字体</div>'+
+      '<div id="ib-cfont-name" style="font-size:0.8rem;color:var(--tx2);margin:6px 0 10px">当前：默认字体（未上传）</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+        '<button id="ib-cfont-pick" class="btn" style="flex:1">选择字体文件…</button>'+
+        '<button id="ib-cfont-clear" class="btn danger" style="flex:none">恢复默认</button>'+
+      '</div>'+
+      '<input type="file" id="ib-cfont-file" accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2" style="display:none">'+
+      '<p class="hint" style="margin:8px 0 0">支持 .ttf / .otf / .woff / .woff2（中文字体通常 3～20MB，请耐心等一秒）。保存后立即全站生效，重启后自动恢复；字体文件只存本机，不进备份文件。</p>';
+    host.appendChild(card);
+    card.querySelector('#ib-cfont-pick').addEventListener('click',function(){card.querySelector('#ib-cfont-file').click()});
+    card.querySelector('#ib-cfont-clear').addEventListener('click',function(){
+      delFont().then(function(){return apply()}).then(function(){status();try{toast('已恢复默认字体')}catch(e){}}).catch(function(){try{toast('清除失败')}catch(e){}});
+    });
+    card.querySelector('#ib-cfont-file').addEventListener('change',function(e){
+      var f=e.target.files&&e.target.files[0];e.target.value='';
+      if(!f)return;
+      var btn=card.querySelector('#ib-cfont-pick');var old=btn.textContent;btn.textContent='保存中…';btn.disabled=true;
+      putFont({name:f.name,blob:f}).then(function(){return apply()}).then(function(){
+        status();try{toast('字体已生效：'+f.name)}catch(e){}
+      }).catch(function(){try{toast('保存失败，文件可能太大')}catch(e){}}).finally(function(){btn.textContent=old;btn.disabled=false});
+    });
+    status();
+  }
+  function boot(){try{mount()}catch(e){} apply().catch(function(){})}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+})();
+</script>
+
 </body>
 </html>
