@@ -3566,6 +3566,7 @@ self.addEventListener(&#x27;fetch&#x27;,function(e){
     <div class="cvd-sec" id="cvd-th-sec"><div class="cvd-lab">话题频道</div><div id="cvd-threads"></div></div>
     <div class="cvd-sec"><div class="cvd-lab">操作</div><div id="cvd-ops"></div></div>
     <div class="cvd-sec"><div class="cvd-lab">设置</div><div id="cvd-set"></div></div>
+    <div class="cvd-sec" id="cvd-csslab-sec" hidden><div class="cvd-lab">CSS 美化</div><div id="cvd-csslab"></div></div>
   </div></div>
   <div id="cv-msgs"></div>
   <div id="cv-attach-strip"></div>
@@ -24539,6 +24540,135 @@ window.IBFx={apply:apply,set:set,cur:cur};if(document.readyState==='loading')doc
     status();
   }
   function boot(){try{mount()}catch(e){} apply().catch(function(){})}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+})();
+</script>
+
+
+<script id="ib-csslab-pack">
+/* ═══ ib-custom：聊天 CSS 美化预设管理 ═══
+   多套预设存于 localStorage（ib_csslab_v1），随用随切；
+   「原生 · iMessage」预设＝空 CSS（即基线样式），切回它就是原生界面。
+   预设只存本机，不进备份文件。 */
+(function(){
+  'use strict';
+  var KEY='ib_csslab_v1',SID='ib-csslab-active';
+  var DEFAULTS=[
+    {id:'native',name:'原生 · iMessage',css:''},
+    {id:'ins_dark',name:'ins · 黑灰忧郁',css:"/* \u2550\u2550\u2550 ins \u00b7 \u9ed1\u7070\u5fe7\u90c1\uff08\u9002\u914d IB-Mobile\uff09\u2550\u2550\u2550 */\n/* \u804a\u5929\u80cc\u666f\uff1a\u6df1\u9ed1 */\n#conv,#cv-msgs{background:#0a0a0d!important;background-image:none!important}\n#cv-msgs{background:transparent!important}\n#conv::before,#conv::after{content:none!important;background:none!important}\n/* \u9876\u680f */\n#conv .cv-head.glass{background:#111114!important;border:none!important;box-shadow:none!important}\n#conv .cv-head .cv-title,#conv #cv-name,#conv .cv-head .icon-btn{color:#d1d1d6!important}\n#conv .cv-head svg{color:#8e8e93!important}\n/* \u6c14\u6ce1\uff1a\u9ed1\u7070\u53cc\u9636 */\n#cv-msgs .m{border-radius:16px}\n#cv-msgs .m.ai{background:#1c1c20!important;color:#c9c9ce!important;box-shadow:none!important}\n#cv-msgs .m.user{background:#3a3a3c!important;color:#eceff3!important;box-shadow:none!important}\n#cv-msgs .m-time{color:#8e8e93!important}\n#cv-msgs .mrow-head .r-head-name,#cv-msgs .mrow-head .r-time{color:#8e8e93!important}\n/* \u8f93\u5165\u680f */\n#conv .cv-input.glass{background:#141417!important;border:1px solid #2c2c2e!important;box-shadow:none!important}\n#conv #cv-ta{background:#1c1c1e!important;color:#e9e9ee!important;border-color:#2c2c2e!important}\n#conv #cv-ta::placeholder{color:#57575c!important}\n#conv .cv-mini,#conv .send-btn{background:#26262b!important;color:#a9a9b0!important;border-color:#2c2c2e!important}\n#conv .send-btn{color:#0095f6!important}\n/* \u5f15\u7528\u6761 / \u9644\u4ef6\u6761 */\n#cv-quote-bar{background:#1c1c1e!important;color:#c9c9ce!important;border-color:#2c2c2e!important}\n#cv-attach-strip .att-thumb{border-color:#2c2c2e!important}\n/* \u804a\u5929\u62bd\u5c49 */\n#cv-drawer .cvd-panel{background:#141417!important;border-color:#2c2c2e!important}\n#cv-drawer .cvd-name,#cv-drawer .cvd-sub,#cv-drawer .cvd-lab{color:#d1d1d6!important}\n#cv-drawer .cvd-panel *{border-color:#2c2c2e!important}\n/* \u65e5\u671f\u5206\u9694\u7b49\u7cfb\u7edf\u884c */\n#cv-msgs .m.bs-msg,#cv-msgs .m.bs-msg *{color:#8e8e93!important;text-shadow:none!important}\nbody.theme-infernal #conv .cv-head.glass{background:#111114!important}\nbody.theme-infernal #conv .cv-input.glass{background:#141417!important}\nbody.theme-infernal #conv #cv-ta{background:#1c1c1e!important}"}
+  ];
+  function load(){
+    var v=null;
+    try{v=JSON.parse(localStorage.getItem(KEY))}catch(e){}
+    if(!v||!Array.isArray(v.presets)){var d={presets:DEFAULTS.slice(),active:'native'};save(d);return d}
+    DEFAULTS.forEach(function(b){
+      var i=-1;
+      for(var k=0;k<v.presets.length;k++)if(v.presets[k].id===b.id){i=k;break}
+      if(i>=0){v.presets[i].css=b.css;v.presets[i].name=b.name;v.presets[i].builtin=true}
+      else v.presets.push(Object.assign({builtin:true},b));
+    });
+    return v;
+  }
+  function save(d){try{localStorage.setItem(KEY,JSON.stringify(d))}catch(e){}}
+  function el(id){return document.getElementById(id)}
+  function applyActive(){
+    var d=load();var st=el(SID);
+    var p=d.presets.filter(function(x){return x.id===d.active})[0];
+    if(!st){st=document.createElement('style');st.id=SID;document.body.appendChild(st)}
+    st.textContent=p?p.css:'';
+    return p;
+  }
+  function mount(){
+    var box=el('cvd-csslab');if(!box||el('csslab-sel'))return;
+    var d=load();
+    box.innerHTML=
+      '<div style="display:flex;align-items:center;gap:6px;margin:2px 0 8px">'+
+        '<select id="csslab-sel" style="flex:1;appearance:none;-webkit-appearance:none;padding:7px 9px;border-radius:11px;border:1px solid var(--glass-line);background:rgba(255,255,255,0.55);color:var(--tx);font-size:0.82rem;outline:none"></select>'+
+        '<button id="csslab-go" class="btn mini" style="flex:none;padding:7px 12px;font-size:0.78rem">应用</button>'+
+      '</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+        '<button id="csslab-new" class="btn mini" style="padding:6px 10px;font-size:0.75rem">新建</button>'+
+        '<button id="csslab-edit" class="btn mini" style="padding:6px 10px;font-size:0.75rem">编辑当前</button>'+
+        '<button id="csslab-del" class="btn mini danger" style="padding:6px 10px;font-size:0.75rem">删除</button>'+
+      '</div>'+
+      '<p class="hint" style="margin:8px 0 0;font-size:0.72rem">写 CSS 覆盖聊天界面样式；预设只存本机、不进备份，换手机需重新导入。</p>';
+    var sel=box.querySelector('#csslab-sel');
+    function paint(){
+      var d=load();
+      sel.innerHTML=d.presets.map(function(p){return '<option value="'+p.id+'">'+p.name+'</option>'}).join('');
+      sel.value=d.active;if(sel.selectedIndex<0&&d.presets.length)sel.value=d.presets[0].id;
+    }
+    paint();
+    function act(){var p=applyActive();return p}
+    box.querySelector('#csslab-go').addEventListener('click',function(){
+      var d=load();d.active=sel.value;save(d);
+      var p=act();
+      try{toast(p?('已应用：'+p.name):'已切回原生')}catch(e){}
+    });
+    box.querySelector('#csslab-new').addEventListener('click',function(){openEditor(null)});
+    box.querySelector('#csslab-edit').addEventListener('click',function(){
+      var d=load();var p=d.presets.filter(function(x){return x.id===sel.value})[0];
+      if(!p){try{toast('先选一个预设')}catch(e){}return}
+      openEditor(p);
+    });
+    box.querySelector('#csslab-del').addEventListener('click',function(){
+      var d=load();var i=-1;
+      for(var k=0;k<d.presets.length;k++)if(d.presets[k].id===sel.value){i=k;break}
+      if(i<0)return;
+      if(d.presets[i].builtin){try{toast('内置预设不能删除')}catch(e){}return}
+      d.presets.splice(i,1);if(d.active===sel.value)d.active='native';
+      save(d);paint();act();try{toast('已删除')}catch(e){}
+    });
+    sel.addEventListener('change',function(){var d=load();d.active=sel.value;save(d);act()});
+    markBuiltin();
+  }
+  function markBuiltin(){var d=load();d.presets.forEach(function(p){if(p.id==='native'||p.id==='ins_dark')p.builtin=true});save(d)}
+  /* ── 编辑器浮层 ── */
+  function ensureEditorStyle(){
+    if(el('csslab-edstyle'))return;
+    var st=document.createElement('style');st.id='csslab-edstyle';
+    st.textContent='#csslab-ov{position:fixed;inset:0;z-index:5800;display:flex;align-items:flex-end;background:rgba(10,12,20,0.42);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}'
+      +'#csslab-ov .ov-card{width:100%;max-width:520px;margin:0 auto;background:var(--sheet,#fff);border-radius:20px 20px 0 0;padding:14px 16px calc(16px + var(--sab,0px));display:flex;flex-direction:column;gap:9px}'
+      +'#csslab-ov input,#csslab-ov textarea{width:100%;box-sizing:border-box;padding:9px 11px;border-radius:11px;border:1px solid var(--glass-line);background:var(--panel,rgba(255,255,255,0.6));color:var(--tx);font-size:0.88rem;outline:none;font-family:inherit}'
+      +'#csslab-ov textarea{height:42vh;font-family:ui-monospace,Consolas,monospace;font-size:0.78rem;line-height:1.5;white-space:pre;overflow:auto}'
+      +'#csslab-ov .row{display:flex;gap:8px}#csslab-ov .row .btn{flex:1}';
+    document.body.appendChild(st);
+  }
+  function openEditor(p){
+    ensureEditorStyle();
+    var ov=document.createElement('div');ov.id='csslab-ov';
+    var isNew=!p;
+    ov.innerHTML='<div class="ov-card">'+
+      '<div style="font-weight:600;font-size:0.9rem;color:var(--tx)">'+(isNew?'新建 CSS 预设':'编辑预设：'+p.name)+'</div>'+
+      '<input id="csslab-ed-name" maxlength="24" placeholder="预设名称（如：ins 黑灰）" value="'+(p?p.name.replace(/"/g,'&quot;'):'')+'">'+
+      '<textarea id="csslab-ed-css" placeholder="粘贴 / 编写 CSS，例如：#cv-msgs .m.user{background:#3a3a3c!important}" spellcheck="false"></textarea>'+
+      '<div class="row"><button id="csslab-ed-cancel" class="btn">取消</button><button id="csslab-ed-save" class="btn">保存</button></div>'+
+      (isNew?'':'<button id="csslab-ed-preview" class="btn" style="font-size:0.78rem">先试看（不保存）</button>')+
+      '</div>';
+    document.body.appendChild(ov);
+    ov.querySelector('#csslab-ed-css').value=p?p.css:'';
+    var close=function(){ov.remove()};
+    ov.querySelector('#csslab-ed-cancel').addEventListener('click',close);
+    ov.addEventListener('click',function(e){if(e.target===ov)close()});
+    var st=el(SID)||{textContent:''};
+    ov.querySelector('#csslab-ed-preview').addEventListener('click',function(){
+      st.textContent=ov.querySelector('#csslab-ed-css').value;try{toast('试看中——保存后才会记住')}catch(e){}
+    });
+    ov.querySelector('#csslab-ed-save').addEventListener('click',function(){
+      var name=ov.querySelector('#csslab-ed-name').value.trim()||'未命名预设';
+      var css=ov.querySelector('#csslab-ed-css').value;
+      var d=load();
+      if(isNew){var id='css_'+Date.now();d.presets.push({id:id,name:name,css:css});d.active=id}
+      else{p.name=name;p.css=css}
+      save(d);close();act();
+      try{toast(isNew?'已保存并应用':'已保存')}catch(e){}
+    });
+  }
+  function boot(){
+    try{applyActive()}catch(e){}
+    try{var sec=el('cvd-csslab-sec');if(sec)sec.hidden=false}catch(e){}
+    try{mount()}catch(e){}
+  }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
 </script>
