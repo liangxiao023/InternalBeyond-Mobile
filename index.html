@@ -3592,7 +3592,7 @@ self.addEventListener(&#x27;fetch&#x27;,function(e){
 #conv #cv-ta{padding:6px 11px;font-size:0.95rem;border-radius:15px;min-width:0}
 #conv #cv-kao{display:none!important}
 /* --- 气泡：iMessage 细长条 --- */
-#cv-msgs .m{max-width:78%;padding:7px 13px;border-radius:17px;font-size:0.92rem;line-height:1.45;box-shadow:none!important}
+#cv-msgs .m{max-width:100%;padding:7px 13px;border-radius:17px;font-size:0.92rem;line-height:1.45;box-shadow:none!important}
 #cv-msgs .m.ai{background:#E9E9EB!important;border:none!important;color:#000!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
 #cv-msgs .m.user{background:#0A84FF!important;border:none!important;color:#fff!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
 body.theme-infernal #cv-msgs .m.ai{background:#26262A!important;color:#E5E5EA!important}
@@ -3604,9 +3604,10 @@ body.theme-infernal #cv-msgs .m.user{background:#0A84FF!important;color:#fff!imp
 #cv-msgs .mrow{margin-bottom:2px}
 #cv-msgs .mrow.cont{margin-top:0}
 #cv-msgs .mrow-head{margin-bottom:2px}
-/* 头像列不再撑宽气泡换行 */
-#cv-msgs .m-body>.m{max-width:min(78%,calc(100% - 34px))}
-#cv-msgs .mrow:not(.hasava) .m-body .m-col,#cv-msgs .mrow:not(.hasava) .m-body>.m{max-width:78%}
+/* 宽度上限只放在有确定宽度的 .m-body 上，内层不再互相用百分比套圈（修「1111」折行） */
+#cv-msgs .mrow .m-body{max-width:80%!important;min-width:0!important}
+#cv-msgs .m-body .m-col{flex:1 1 auto!important;min-width:0!important;max-width:none!important}
+#cv-msgs .m-body>.m{max-width:100%!important}
 /* --- 修打字卡顿：关掉输入栏/顶栏的 backdrop-filter 重绘 --- */
 #conv .cv-input.glass::before,#conv .cv-head.glass::before,#cv-selbar.glass::before{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
 #conv .cv-input.glass,#conv .cv-head.glass{background:rgba(250,250,252,0.96)}
