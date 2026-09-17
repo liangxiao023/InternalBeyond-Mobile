@@ -24560,10 +24560,9 @@ window.IBFx={apply:apply,set:set,cur:cur};if(document.readyState==='loading')doc
 
 
 <script id="ib-csslab-pack">
-/* ═══ ib-custom：聊天 CSS 美化预设管理 ═══
-   多套预设存于 localStorage（ib_csslab_v1），随用随切；
-   「原生 · iMessage」预设＝空 CSS（即基线样式），切回它就是原生界面。
-   预设只存本机，不进备份文件。 */
+/* ═══ ib-custom v2：聊天 CSS 美化预设管理 ═══
+   双入口：聊天抽屉底部「CSS 美化」 + 视觉页文字分区「CSS Lab」。
+   预设存 localStorage（ib_csslab_v1），两处共用一份；应用到 body 末尾。 */
 (function(){
   'use strict';
   var KEY='ib_csslab_v1',SID='ib-csslab-active';
@@ -24592,51 +24591,68 @@ window.IBFx={apply:apply,set:set,cur:cur};if(document.readyState==='loading')doc
     st.textContent=p?p.css:'';
     return p;
   }
-  function mount(){
-    var box=el('cvd-csslab');if(!box||el('csslab-sel'))return;
+  var _boxes=[];
+  function paintAll(){
     var d=load();
-    box.innerHTML=
-      '<div style="display:flex;align-items:center;gap:6px;margin:2px 0 8px">'+
-        '<select id="csslab-sel" style="flex:1;appearance:none;-webkit-appearance:none;padding:7px 9px;border-radius:11px;border:1px solid var(--glass-line);background:rgba(255,255,255,0.55);color:var(--tx);font-size:0.82rem;outline:none"></select>'+
-        '<button id="csslab-go" class="btn mini" style="flex:none;padding:7px 12px;font-size:0.78rem">应用</button>'+
-      '</div>'+
-      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
-        '<button id="csslab-new" class="btn mini" style="padding:6px 10px;font-size:0.75rem">新建</button>'+
-        '<button id="csslab-edit" class="btn mini" style="padding:6px 10px;font-size:0.75rem">编辑当前</button>'+
-        '<button id="csslab-del" class="btn mini danger" style="padding:6px 10px;font-size:0.75rem">删除</button>'+
-      '</div>'+
-      '<p class="hint" style="margin:8px 0 0;font-size:0.72rem">写 CSS 覆盖聊天界面样式；预设只存本机、不进备份，换手机需重新导入。</p>';
-    var sel=box.querySelector('#csslab-sel');
-    function paint(){
-      var d=load();
+    _boxes.forEach(function(b){
+      var sel=b.querySelector('.cl-sel');if(!sel)return;
+      var cur=sel.value;
       sel.innerHTML=d.presets.map(function(p){return '<option value="'+p.id+'">'+p.name+'</option>'}).join('');
       sel.value=d.active;if(sel.selectedIndex<0&&d.presets.length)sel.value=d.presets[0].id;
-    }
-    paint();
-    function act(){var p=applyActive();return p}
-    box.querySelector('#csslab-go').addEventListener('click',function(){
+    });
+  }
+  function buildInto(box){
+    box.innerHTML=
+      '<div style="display:flex;align-items:center;gap:6px;margin:2px 0 8px">'+
+        '<select class="cl-sel" style="flex:1;appearance:none;-webkit-appearance:none;padding:7px 9px;border-radius:11px;border:1px solid var(--glass-line);background:rgba(255,255,255,0.55);color:var(--tx);font-size:0.82rem;outline:none"></select>'+
+        '<button class="cl-go btn mini" style="flex:none;padding:7px 12px;font-size:0.78rem">应用</button>'+
+      '</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+        '<button class="cl-new btn mini" style="padding:6px 10px;font-size:0.75rem">新建</button>'+
+        '<button class="cl-edit btn mini" style="padding:6px 10px;font-size:0.75rem">编辑当前</button>'+
+        '<button class="cl-del btn mini danger" style="padding:6px 10px;font-size:0.75rem">删除</button>'+
+      '</div>'+
+      '<p class="hint" style="margin:8px 0 0;font-size:0.72rem">写 CSS 覆盖聊天界面样式；预设只存本机、不进备份，换手机需重新导入。</p>';
+    var sel=box.querySelector('.cl-sel');
+    sel.addEventListener('change',function(){var d=load();d.active=sel.value;save(d);applyActive();paintAll()});
+    box.querySelector('.cl-go').addEventListener('click',function(){
       var d=load();d.active=sel.value;save(d);
-      var p=act();
+      var p=applyActive();paintAll();
       try{toast(p?('已应用：'+p.name):'已切回原生')}catch(e){}
     });
-    box.querySelector('#csslab-new').addEventListener('click',function(){openEditor(null)});
-    box.querySelector('#csslab-edit').addEventListener('click',function(){
+    box.querySelector('.cl-new').addEventListener('click',function(){openEditor(null)});
+    box.querySelector('.cl-edit').addEventListener('click',function(){
       var d=load();var p=d.presets.filter(function(x){return x.id===sel.value})[0];
       if(!p){try{toast('先选一个预设')}catch(e){}return}
       openEditor(p);
     });
-    box.querySelector('#csslab-del').addEventListener('click',function(){
+    box.querySelector('.cl-del').addEventListener('click',function(){
       var d=load();var i=-1;
       for(var k=0;k<d.presets.length;k++)if(d.presets[k].id===sel.value){i=k;break}
       if(i<0)return;
       if(d.presets[i].builtin){try{toast('内置预设不能删除')}catch(e){}return}
       d.presets.splice(i,1);if(d.active===sel.value)d.active='native';
-      save(d);paint();act();try{toast('已删除')}catch(e){}
+      save(d);applyActive();paintAll();try{toast('已删除')}catch(e){}
     });
-    sel.addEventListener('change',function(){var d=load();d.active=sel.value;save(d);act()});
-    markBuiltin();
+    _boxes.push(box);
   }
-  function markBuiltin(){var d=load();d.presets.forEach(function(p){if(p.id==='native'||p.id==='ins_dark')p.builtin=true});save(d)}
+  function mount(){
+    var d1=el('cvd-csslab');
+    if(d1&&!d1.dataset.on){d1.dataset.on='1';buildInto(d1)}
+    var card=el('ib-csslab-card');
+    if(!card){
+      var host=el('sec-visual-text');
+      if(host){
+        card=document.createElement('div');
+        card.className='set-card';card.id='ib-csslab-card';card.style.marginTop='12px';
+        card.innerHTML='<div class="sc-t">CSS Lab — 聊天美化预设</div><p class="hint" style="margin:6px 0 10px">多套聊天界面 CSS 预设，随用随切；与聊天抽屉底部「CSS 美化」是同一份。</p><div class="cl-body"></div>';
+        host.appendChild(card);
+      }
+    }
+    var d2=card?card.querySelector('.cl-body'):null;
+    if(d2&&!d2.dataset.on){d2.dataset.on='1';buildInto(d2)}
+    paintAll();
+  }
   /* ── 编辑器浮层 ── */
   function ensureEditorStyle(){
     if(el('csslab-edstyle'))return;
@@ -24674,7 +24690,7 @@ window.IBFx={apply:apply,set:set,cur:cur};if(document.readyState==='loading')doc
       var d=load();
       if(isNew){var id='css_'+Date.now();d.presets.push({id:id,name:name,css:css});d.active=id}
       else{p.name=name;p.css=css}
-      save(d);close();act();
+      save(d);close();applyActive();paintAll();
       try{toast(isNew?'已保存并应用':'已保存')}catch(e){}
     });
   }
@@ -24686,6 +24702,7 @@ window.IBFx={apply:apply,set:set,cur:cur};if(document.readyState==='loading')doc
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
 </script>
+
 
 </body>
 </html>
