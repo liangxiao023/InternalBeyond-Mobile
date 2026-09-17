@@ -1,8 +1,8 @@
 /* InternalBeyond Mobile — ib-sw.js（Service Worker 模板 · 联网优先，离线回退）
    与手机端 HTML 放在同一目录，经 HTTPS 访问时页面会自动注册本文件。
    只接管本站的 GET 请求；发往 AI 服务商 / 中转站的请求原样放行、绝不缓存。 */
-const IB_CACHE='ib-cache-v3';
-const NAV_TIMEOUT=20000,ASSET_TIMEOUT=9000,FAST_FALLBACK=3500;
+const IB_CACHE='ib-cache-v4';/* ib-custom：v3→v4 强制清旧缓存（自定义字体/预设要被手机拉到）*/
+const NAV_TIMEOUT=20000,ASSET_TIMEOUT=9000,FAST_FALLBACK=6000;
 self.addEventListener('install',function(){self.skipWaiting()});
 self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k!==IB_CACHE}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});
 function withTimeout(p,ms){return new Promise(function(res,rej){var t=setTimeout(function(){rej(new Error('timeout'))},ms);p.then(function(v){clearTimeout(t);res(v)},function(e){clearTimeout(t);rej(e)})})}

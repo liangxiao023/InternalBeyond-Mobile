@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' blob: https://u.y.qq.com https://lp.open.weixin.qq.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src * data: blob:; media-src * data: blob:; connect-src * data: blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' blob: https://u.y.qq.com https://lp.open.weixin.qq.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: blob: https://fonts.gstatic.com; img-src * data: blob:; media-src * data: blob:; connect-src * data: blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -24482,10 +24482,14 @@ window.IBFx={apply:apply,set:set,cur:cur};if(document.readyState==='loading')doc
 </script>
 
 <script id="ib-customfont-pack">
-/* ═══ ib-custom：自定义字体 ═══ 上传一个 ttf/otf/woff/woff2，全站正文与标题生效；字体文件存在独立数据库 IBCustomFontDB，不进 IB 备份 ═══ */
+/* ═══ ib-custom：自定义字体 ═══ 上传 ttf/otf/woff/woff2，全站正文与标题生效；
+   字体文件存独立数据库 IBCustomFontDB（不进 IB 备份）。
+   v3：注入后真校验能不能加载（CSP 拦 blob: / 文件损坏 / 浏览器没给到文件内容都能查出来），
+       失败自动改用 data: URL 兜底；卡片上直接显示文件大小、加载状态与真机预览，便于自查。 */
 (function(){
   'use strict';
   var DB='ibCustomFontDB',STORE='fonts',KEY='global';
+  var BUILD='2026-09-17 · font/bg fix';
   var _url=null,_dbP=null;
   function db(){
     if(_dbP)return _dbP;
@@ -24505,33 +24509,74 @@ window.IBFx={apply:apply,set:set,cur:cur};if(document.readyState==='loading')doc
   function getFont(){return tx('readonly',function(st){return st.get(KEY)})}
   function putFont(rec){return tx('readwrite',function(st){return st.put(rec,KEY)})}
   function delFont(){return tx('readwrite',function(st){return st.delete(KEY)})}
+  var ST_FONT_CSS="body{font-family:'IBCustomFont','Noto Sans SC','PingFang SC','Microsoft YaHei',system-ui,sans-serif!important}"
+    +"body *{font-family:inherit!important}"
+    +"pre,code,kbd{font-family:ui-monospace,'IBM Plex Mono',Consolas,monospace!important}"
+    +":root{--disp:'IBCustomFont','Raleway','Noto Sans SC',sans-serif!important}"
+    +":root{--serif:'IBCustomFont','Noto Serif SC','Songti SC',serif!important}"
+    +":root{--sys:'IBCustomFont',-apple-system,'PingFang SC','Noto Sans SC',sans-serif!important}";
+  function inject(src){
+    var st=document.getElementById('ib-cfont-style');
+    if(!st){st=document.createElement('style');st.id='ib-cfont-style'}
+    st.textContent="@font-face{font-family:'IBCustomFont';src:url('"+src+"');font-display:swap}"+ST_FONT_CSS;
+    document.body.appendChild(st);/* 放 body 末尾，压过运行时插到 head 的动态样式 */
+  }
+  function clearFaces(){
+    try{if(!document.fonts||!document.fonts.delete)return;var del=[];
+      document.fonts.forEach(function(f){try{if(String(f.family).replace(/['"]/g,'')==='IBCustomFont')del.push(f)}catch(e){}});
+      del.forEach(function(f){try{document.fonts.delete(f)}catch(e){}});
+    }catch(e){}
+  }
+  function verify(){
+    if(!document.fonts||!document.fonts.load)return Promise.resolve(true);
+    var t=new Promise(function(r){setTimeout(function(){r(false)},6000)});
+    var load=document.fonts.load('16px IBCustomFont','Aa汉字').then(function(){
+      try{return document.fonts.check('16px IBCustomFont')}catch(e){return true}
+    }).catch(function(){return false});
+    return Promise.race([load,t]);
+  }
+  function blobToDataURL(blob){
+    return new Promise(function(res,rej){var fr=new FileReader();
+      fr.onload=function(){res(fr.result)};fr.onerror=function(){rej(fr.error)};fr.readAsDataURL(blob)});
+  }
+  function fmtSize(n){if(!n&&n!==0)return '?';
+    if(n<1024)return n+' B';
+    if(n<1048576)return (n/1024).toFixed(1)+' KB';
+    return (n/1048576).toFixed(1)+' MB';}
+  var _state={name:'',size:0,mode:'',ok:null};
+  function paint(){
+    var info=document.getElementById('ib-cfont-info');
+    if(!info)return;
+    if(!_state.name){info.textContent='状态：未上传自定义字体';return}
+    var s='文件：'+_state.name+'（'+fmtSize(_state.size)+'）· 加载方式：'+(_state.mode==='data'?'data 兜底':'blob 直读');
+    if(_state.ok===true)s+=' · ✅ 已加载生效';
+    else if(_state.ok===false)s+=' · ❌ 浏览器未能加载此文件';
+    else s+=' · 加载中…';
+    info.textContent=s;
+  }
   function apply(){
+    var st=document.getElementById('ib-cfont-style');
+    _state.mode='';_state.ok=null;paint();
     return getFont().then(function(rec){
-      var st=document.getElementById('ib-cfont-style');
-      if(!rec){
-        if(st)st.textContent='';
-        try{if(_url){URL.revokeObjectURL(_url);_url=null}}catch(e){}
-        return null;
-      }
+      clearFaces();
       try{if(_url){URL.revokeObjectURL(_url);_url=null}}catch(e){}
-      _url=URL.createObjectURL(rec.blob);
-      var css="@font-face{font-family:'IBCustomFont';src:url('"+_url+"');font-display:swap;font-weight:normal;font-style:normal}"
-        +"body{font-family:'IBCustomFont','Noto Sans SC','PingFang SC','Microsoft YaHei',system-ui,sans-serif!important}"
-        +"body *{font-family:inherit!important}"
-        +"pre,code,kbd{font-family:ui-monospace,'IBM Plex Mono',Consolas,monospace!important}"
-        +":root{--disp:'IBCustomFont','Raleway','Noto Sans SC',sans-serif!important}";
-      if(!st){st=document.createElement('style');st.id='ib-cfont-style'}
-      st.textContent=css;
-      document.body.appendChild(st);/* 放 body 末尾，压过运行时插到 head 的动态样式 */
-      return rec;
+      if(!rec){if(st)st.textContent='';_state.name='';_state.size=0;_state.ok=null;paint();return null}
+      _state.name=rec.name||'（未命名）';
+      try{_state.size=rec.blob?rec.blob.size:0}catch(e){_state.size=0}
+      if(!rec.blob||!rec.blob.size){_state.ok=false;paint();rec.bad=true;return rec}
+      _url=URL.createObjectURL(rec.blob);_state.mode='blob';
+      inject(_url);paint();
+      return verify().then(function(ok){
+        if(ok){_state.ok=true;paint();return rec}
+        /* blob: 被 CSP 拦 / 老内核不认 → 改用 data: URL 再试一次 */
+        return blobToDataURL(rec.blob).then(function(d){
+          clearFaces();inject(d);_state.mode='data';paint();
+          return verify().then(function(ok2){_state.ok=!!ok2;rec.bad=!ok2;paint();return rec});
+        }).catch(function(){_state.ok=false;rec.bad=true;paint();return rec});
+      });
     });
   }
-  function status(){
-    getFont().then(function(rec){
-      var el=document.getElementById('ib-cfont-name');
-      if(el)el.textContent=rec?('当前：'+rec.name):'当前：默认字体（未上传）';
-    }).catch(function(){});
-  }
+  function status(){apply().catch(function(){})}
   function mount(){
     var host=document.getElementById('sec-visual-text');
     if(!host||document.getElementById('ib-cfont-card'))return;
@@ -24540,29 +24585,46 @@ window.IBFx={apply:apply,set:set,cur:cur};if(document.readyState==='loading')doc
     card.style.marginTop='12px';
     card.innerHTML=
       '<div class="sc-t">Font — 自定义字体</div>'+
-      '<div id="ib-cfont-name" style="font-size:0.8rem;color:var(--tx2);margin:6px 0 10px">当前：默认字体（未上传）</div>'+
+      '<div id="ib-cfont-name" style="font-size:0.8rem;color:var(--tx2);margin:6px 0 4px">当前：默认字体（未上传）</div>'+
+      '<div id="ib-cfont-info" style="font-size:0.72rem;color:var(--tx2);margin:0 0 8px;line-height:1.5">状态：未上传自定义字体</div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
         '<button id="ib-cfont-pick" class="btn" style="flex:1">选择字体文件…</button>'+
         '<button id="ib-cfont-clear" class="btn danger" style="flex:none">恢复默认</button>'+
       '</div>'+
       '<input type="file" id="ib-cfont-file" accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2" style="display:none">'+
-      '<p class="hint" style="margin:8px 0 0">支持 .ttf / .otf / .woff / .woff2（中文字体通常 3～20MB，请耐心等一秒）。保存后立即全站生效，重启后自动恢复；字体文件只存本机，不进备份文件。</p>';
+      '<div style="margin-top:10px;padding:8px 10px;border-radius:12px;background:rgba(127,127,127,0.10)">'+
+        '<div style="font-size:0.68rem;color:var(--tx2);margin-bottom:4px">预览 · 自定义字体</div>'+
+        '<div id="ib-cfont-demo1" style="font-size:1.15rem;line-height:1.5;font-family:IBCustomFont!important">柏林雨季的冷都手写 Aa 123</div>'+
+        '<div style="font-size:0.68rem;color:var(--tx2);margin:6px 0 4px">预览 · 系统默认（作对照）</div>'+
+        '<div id="ib-cfont-demo2" style="font-size:1.15rem;line-height:1.5;font-family:sans-serif!important">柏林雨季的冷都手写 Aa 123</div>'+
+      '</div>'+
+      '<p class="hint" style="margin:8px 0 0">支持 .ttf / .otf / .woff / .woff2（中文字体通常 3～20MB，请耐心等一秒）。'+
+      '保存后立即全站生效，重启后自动恢复；字体文件只存本机，不进备份文件。<br>'+
+      '<span style="opacity:.72">若上面两行预览长得一样，说明手机浏览器没能加载这个字体文件——'+
+      '请换用 Chrome / Edge 打开本站再上传一次（部分国产浏览器不给网页文件内容，或拦截本地字体）。</span><br>'+
+      '<span style="opacity:.55">构建：'+BUILD+'</span></p>';
     host.appendChild(card);
     card.querySelector('#ib-cfont-pick').addEventListener('click',function(){card.querySelector('#ib-cfont-file').click()});
     card.querySelector('#ib-cfont-clear').addEventListener('click',function(){
-      delFont().then(function(){return apply()}).then(function(){status();try{toast('已恢复默认字体')}catch(e){}}).catch(function(){try{toast('清除失败')}catch(e){}});
+      delFont().then(function(){return apply()}).then(function(){try{toast('已恢复默认字体')}catch(e){}}).catch(function(){try{toast('清除失败')}catch(e){}});
     });
     card.querySelector('#ib-cfont-file').addEventListener('change',function(e){
       var f=e.target.files&&e.target.files[0];e.target.value='';
       if(!f)return;
+      if(!f.size){try{toast('这个浏览器没把文件内容交给网页（大小 0），请换 Chrome / Edge 再试')}catch(e){}
+        var nm=document.getElementById('ib-cfont-name');
+        if(nm)nm.textContent='当前：上传失败（浏览器未提供文件内容）';
+        return;}
       var btn=card.querySelector('#ib-cfont-pick');var old=btn.textContent;btn.textContent='保存中…';btn.disabled=true;
-      putFont({name:f.name,blob:f}).then(function(){return apply()}).then(function(){
-        status();try{toast('字体已生效：'+f.name)}catch(e){}
+      putFont({name:f.name,blob:f}).then(function(){return apply()}).then(function(rec){
+        if(rec&&rec.bad){try{toast('已保存 '+f.name+'，但浏览器加载不了这个字体文件，请换一个字体或换浏览器')}catch(e){}}
+        else{try{toast('字体已生效：'+f.name)}catch(e){}}
       }).catch(function(){try{toast('保存失败，文件可能太大')}catch(e){}}).finally(function(){btn.textContent=old;btn.disabled=false});
     });
     status();
   }
   function boot(){try{mount()}catch(e){} apply().catch(function(){})}
+  try{window._ibFontApply=apply;window._ibFontStatus=status}catch(e){}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
 </script>
@@ -24575,9 +24637,10 @@ window.IBFx={apply:apply,set:set,cur:cur};if(document.readyState==='loading')doc
 (function(){
   'use strict';
   var KEY='ib_csslab_v1',SID='ib-csslab-active';
+  var BUILD='2026-09-17 · font/bg fix';
   var DEFAULTS=[
     {id:'native',name:'原生 · iMessage',css:''},
-    {id:'ins_dark',name:'ins · 浅灰',css:"/* \u2550\u2550\u2550 ins \u00b7 \u6d45\u7070\uff081:1 \u53c2\u7167 ins.\u8e72 \u6c14\u6ce1\u89c4\u683c\uff09\u2550\u2550\u2550 */\n/* \u80cc\u666f\uff1a\u4fdd\u7559\u81ea\u5b9a\u4e49\u58c1\u7eb8\u4e0e\u539f\u6d45\u8272\u5149\u7f69\uff0c\u515c\u5e95 #f4f7f2 */\n#conv{background:#f4f7f2!important;background-image:none!important}\n#cv-msgs{background:transparent!important;gap:5px!important}\n/* \u9876\u680f */\n#conv .cv-head.glass{background:rgba(255,255,255,0.92)!important;border:none!important;box-shadow:0 1px 0 rgba(0,0,0,0.06)!important}\n#conv .cv-head .cv-title,#conv #cv-name,#conv .cv-head .cv-title *{color:#111111!important;letter-spacing:0.02em}\n#conv .cv-head .icon-btn,#conv .cv-head .icon-btn svg,#conv .cv-head>button svg{color:#3a3a3c!important}\n/* \u6c14\u6ce1\u5f62\u72b6\uff1ains.\u8e72 \u89c4\u683c\u2014\u201418px \u5927\u5706\u89d2 + \u5206\u7ec4 4px \u5c0f\u89d2\uff0c\u65e0\u8fb9\u6846\u65e0\u6295\u5f71 */\n#cv-msgs .m{padding:7px 11px;border-radius:18px;font-size:0.92rem;line-height:1.4;box-shadow:none!important;border:none!important}\n#cv-msgs .m.bs-msg{background:none!important;padding:0!important;border:none!important;border-radius:0!important;box-shadow:none!important}\n#cv-msgs .m.bs-msg .bs-seg{padding:7px 11px;border-radius:18px;font-size:0.92rem;line-height:1.4;box-shadow:none!important;border:none!important;max-width:100%}\n#cv-msgs .m.bs-msg .bs-seg+.bs-seg{margin-top:5px}\n#cv-msgs .m.ai:not(.bs-msg){background:#E5E5E7!important;color:#111111!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}\n#cv-msgs .m.ai.bs-msg .bs-seg{background:#E5E5E7!important;color:#111111!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}\n#cv-msgs .m.user:not(.bs-msg){background:#3A3A3C!important;color:#FFFFFF!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}\n#cv-msgs .m.user.bs-msg .bs-seg{background:#3A3A3C!important;color:#FFFFFF!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}\n/* \u5206\u7ec4\u5c0f\u89d2\uff1a\u9996\u6761\u5728\u4e0b\u4fa7\u6536\uff0c\u8fde\u7eed\u6761\u5728\u4e0a\u4fa7\u6536 */\n#cv-msgs .mrow.ai .m:not(.bs-msg){border-radius:18px 18px 18px 4px}\n#cv-msgs .mrow.ai .m.bs-msg .bs-seg:first-child{border-radius:18px 18px 18px 4px}\n#cv-msgs .mrow.ai .m.bs-msg .bs-seg:last-child{border-radius:4px 18px 18px 18px}\n#cv-msgs .mrow.ai .m.bs-msg .bs-seg:only-child,#cv-msgs .mrow.ai .m.bs-msg .bs-seg:only-of-type{border-radius:18px 18px 18px 4px}\n#cv-msgs .mrow.ai.cont .m:not(.bs-msg){border-radius:4px 18px 18px 4px}\n#cv-msgs .mrow.ai.cont .m.bs-msg .bs-seg{border-radius:4px 18px 18px 4px}\n#cv-msgs .mrow.user .m:not(.bs-msg){border-radius:18px 18px 4px 18px}\n#cv-msgs .mrow.user .m.bs-msg .bs-seg:first-child{border-radius:18px 18px 4px 18px}\n#cv-msgs .mrow.user .m.bs-msg .bs-seg:last-child{border-radius:18px 4px 18px 18px}\n#cv-msgs .mrow.user.cont .m:not(.bs-msg){border-radius:18px 4px 4px 18px}\n#cv-msgs .mrow.user.cont .m.bs-msg .bs-seg{border-radius:18px 4px 4px 18px}\n/* \u65f6\u95f4\u6233\u4e0e\u7cfb\u7edf\u884c */\n#cv-msgs .m-time{color:#8e8e93!important}\n#cv-msgs .mrow-head .r-head-name,#cv-msgs .mrow-head .r-time{color:#8e8e93!important}\n#cv-msgs .m.bs-msg,#cv-msgs .m.bs-msg *{color:#8e8e93!important;text-shadow:none!important;background:none!important}\n/* \u8f93\u5165\u680f\uff1a\u88f8\u56fe\u6807\u6309\u94ae + \u540c\u8272\u7cfb\u53d1\u9001\u952e */\n#conv .cv-input.glass{background:rgba(244,247,242,0.96)!important;border:none!important;box-shadow:0 -1px 0 rgba(0,0,0,0.05)!important}\n#conv #cv-ta{background:transparent!important;color:#111111!important;border:none!important}\n#conv #cv-ta:focus{box-shadow:inset 0 0 0 1px rgba(60,60,67,0.25)!important}\n#conv #cv-ta::placeholder{color:#8e8e93!important}\n#conv .cv-mini{background:transparent!important;color:#3a3a3c!important;border:none!important;box-shadow:none!important}\n#conv .send-btn{background:#3A3A3C!important;color:#FFFFFF!important;border:none!important;box-shadow:none!important}\n/* \u5f15\u7528\u6761 / \u9009\u62e9\u680f / \u9644\u4ef6\u6761 */\n#cv-quote-bar{background:rgba(255,255,255,0.95)!important;color:#111111!important;border-color:rgba(0,0,0,0.06)!important}\n#cv-selbar.glass{background:rgba(255,255,255,0.96)!important;border-color:rgba(0,0,0,0.06)!important}\n#cv-attach-strip .att-thumb{border-color:rgba(0,0,0,0.1)!important}\n/* \u804a\u5929\u62bd\u5c49 */\n#cv-drawer .cvd-panel{background:rgba(250,250,252,0.97)!important;border-color:rgba(0,0,0,0.06)!important;box-shadow:8px 0 30px rgba(17,20,24,0.12)!important}\n#cv-drawer .cvd-name,#cv-drawer .cvd-sub,#cv-drawer .cvd-lab{color:#111111!important}\n#cvd-csslab,#cvd-csslab *{color:#3a3a3c!important}\n#cv-drawer .cvd-panel *{border-color:rgba(0,0,0,0.06)!important}\n/* Infernal \u4e3b\u9898\u4e0b\u540c\u6b3e\u6d45\u7070 */\nbody.theme-infernal #conv .cv-head.glass{background:rgba(255,255,255,0.92)!important}\nbody.theme-infernal #conv .cv-input.glass{background:rgba(244,247,242,0.96)!important}\nbody.theme-infernal #conv #cv-ta{background:transparent!important;color:#111111!important}"}
+    {id:'ins_dark',name:'ins · 浅灰',css:"/* \u2550\u2550\u2550 ins \u00b7 \u6d45\u7070\uff081:1 \u53c2\u7167 ins.\u8e72 \u6c14\u6ce1\u89c4\u683c\uff09\u2550\u2550\u2550 */\n/* \u80cc\u666f\uff1a\u4fdd\u7559\u81ea\u5b9a\u4e49\u58c1\u7eb8\u4e0e\u539f\u6d45\u8272\u5149\u7f69\uff0c\u515c\u5e95 #f4f7f2 */\n#conv{background-color:#f4f7f2!important}/* 不碰 background-image：保留 #conv::before 的自定义聊天背景 */\n#cv-msgs{background-color:transparent!important;gap:5px!important}/* 用 background-color，别抹掉专属聊天背景（它写在 #cv-msgs 行内 background-image）*/\n/* \u9876\u680f */\n#conv .cv-head.glass{background:rgba(255,255,255,0.92)!important;border:none!important;box-shadow:0 1px 0 rgba(0,0,0,0.06)!important}\n#conv .cv-head .cv-title,#conv #cv-name,#conv .cv-head .cv-title *{color:#111111!important;letter-spacing:0.02em}\n#conv .cv-head .icon-btn,#conv .cv-head .icon-btn svg,#conv .cv-head>button svg{color:#3a3a3c!important}\n/* \u6c14\u6ce1\u5f62\u72b6\uff1ains.\u8e72 \u89c4\u683c\u2014\u201418px \u5927\u5706\u89d2 + \u5206\u7ec4 4px \u5c0f\u89d2\uff0c\u65e0\u8fb9\u6846\u65e0\u6295\u5f71 */\n#cv-msgs .m{padding:7px 11px;border-radius:18px;font-size:0.92rem;line-height:1.4;box-shadow:none!important;border:none!important}\n#cv-msgs .m.bs-msg{background:none!important;padding:0!important;border:none!important;border-radius:0!important;box-shadow:none!important}\n#cv-msgs .m.bs-msg .bs-seg{padding:7px 11px;border-radius:18px;font-size:0.92rem;line-height:1.4;box-shadow:none!important;border:none!important;max-width:100%}\n#cv-msgs .m.bs-msg .bs-seg+.bs-seg{margin-top:5px}\n#cv-msgs .m.ai:not(.bs-msg){background:#E5E5E7!important;color:#111111!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}\n#cv-msgs .m.ai.bs-msg .bs-seg{background:#E5E5E7!important;color:#111111!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}\n#cv-msgs .m.user:not(.bs-msg){background:#3A3A3C!important;color:#FFFFFF!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}\n#cv-msgs .m.user.bs-msg .bs-seg{background:#3A3A3C!important;color:#FFFFFF!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}\n/* \u5206\u7ec4\u5c0f\u89d2\uff1a\u9996\u6761\u5728\u4e0b\u4fa7\u6536\uff0c\u8fde\u7eed\u6761\u5728\u4e0a\u4fa7\u6536 */\n#cv-msgs .mrow.ai .m:not(.bs-msg){border-radius:18px 18px 18px 4px}\n#cv-msgs .mrow.ai .m.bs-msg .bs-seg:first-child{border-radius:18px 18px 18px 4px}\n#cv-msgs .mrow.ai .m.bs-msg .bs-seg:last-child{border-radius:4px 18px 18px 18px}\n#cv-msgs .mrow.ai .m.bs-msg .bs-seg:only-child,#cv-msgs .mrow.ai .m.bs-msg .bs-seg:only-of-type{border-radius:18px 18px 18px 4px}\n#cv-msgs .mrow.ai.cont .m:not(.bs-msg){border-radius:4px 18px 18px 4px}\n#cv-msgs .mrow.ai.cont .m.bs-msg .bs-seg{border-radius:4px 18px 18px 4px}\n#cv-msgs .mrow.user .m:not(.bs-msg){border-radius:18px 18px 4px 18px}\n#cv-msgs .mrow.user .m.bs-msg .bs-seg:first-child{border-radius:18px 18px 4px 18px}\n#cv-msgs .mrow.user .m.bs-msg .bs-seg:last-child{border-radius:18px 4px 18px 18px}\n#cv-msgs .mrow.user.cont .m:not(.bs-msg){border-radius:18px 4px 4px 18px}\n#cv-msgs .mrow.user.cont .m.bs-msg .bs-seg{border-radius:18px 4px 4px 18px}\n/* \u65f6\u95f4\u6233\u4e0e\u7cfb\u7edf\u884c */\n#cv-msgs .m-time{color:#8e8e93!important}\n#cv-msgs .mrow-head .r-head-name,#cv-msgs .mrow-head .r-time{color:#8e8e93!important}\n#cv-msgs .m.bs-msg,#cv-msgs .m.bs-msg *{color:#8e8e93!important;text-shadow:none!important;background:none!important}\n/* \u8f93\u5165\u680f\uff1a\u88f8\u56fe\u6807\u6309\u94ae + \u540c\u8272\u7cfb\u53d1\u9001\u952e */\n#conv .cv-input.glass{background:rgba(244,247,242,0.96)!important;border:none!important;box-shadow:0 -1px 0 rgba(0,0,0,0.05)!important}\n#conv #cv-ta{background:transparent!important;color:#111111!important;border:none!important}\n#conv #cv-ta:focus{box-shadow:inset 0 0 0 1px rgba(60,60,67,0.25)!important}\n#conv #cv-ta::placeholder{color:#8e8e93!important}\n#conv .cv-mini{background:transparent!important;color:#3a3a3c!important;border:none!important;box-shadow:none!important}\n#conv .send-btn{background:#3A3A3C!important;color:#FFFFFF!important;border:none!important;box-shadow:none!important}\n/* \u5f15\u7528\u6761 / \u9009\u62e9\u680f / \u9644\u4ef6\u6761 */\n#cv-quote-bar{background:rgba(255,255,255,0.95)!important;color:#111111!important;border-color:rgba(0,0,0,0.06)!important}\n#cv-selbar.glass{background:rgba(255,255,255,0.96)!important;border-color:rgba(0,0,0,0.06)!important}\n#cv-attach-strip .att-thumb{border-color:rgba(0,0,0,0.1)!important}\n/* \u804a\u5929\u62bd\u5c49 */\n#cv-drawer .cvd-panel{background:rgba(250,250,252,0.97)!important;border-color:rgba(0,0,0,0.06)!important;box-shadow:8px 0 30px rgba(17,20,24,0.12)!important}\n#cv-drawer .cvd-name,#cv-drawer .cvd-sub,#cv-drawer .cvd-lab{color:#111111!important}\n#cvd-csslab,#cvd-csslab *{color:#3a3a3c!important}\n#cv-drawer .cvd-panel *{border-color:rgba(0,0,0,0.06)!important}\n/* Infernal \u4e3b\u9898\u4e0b\u540c\u6b3e\u6d45\u7070 */\nbody.theme-infernal #conv .cv-head.glass{background:rgba(255,255,255,0.92)!important}\nbody.theme-infernal #conv .cv-input.glass{background:rgba(244,247,242,0.96)!important}\nbody.theme-infernal #conv #cv-ta{background:transparent!important;color:#111111!important}"}
   ];
   function load(){
     var v=null;
@@ -24621,7 +24684,7 @@ window.IBFx={apply:apply,set:set,cur:cur};if(document.readyState==='loading')doc
         '<button class="cl-edit btn mini" style="padding:6px 10px;font-size:0.75rem">编辑当前</button>'+
         '<button class="cl-del btn mini danger" style="padding:6px 10px;font-size:0.75rem">删除</button>'+
       '</div>'+
-      '<p class="hint" style="margin:8px 0 0;font-size:0.72rem">写 CSS 覆盖聊天界面样式；预设只存本机、不进备份，换手机需重新导入。</p>';
+      '<p class="hint" style="margin:8px 0 0;font-size:0.72rem">写 CSS 覆盖聊天界面样式；预设只存本机、不进备份，换手机需重新导入。<br>'+'<span style="opacity:.55">构建：'+BUILD+'</span></p>';
     var sel=box.querySelector('.cl-sel');
     sel.addEventListener('change',function(){var d=load();d.active=sel.value;save(d);applyActive();paintAll()});
     box.querySelector('.cl-go').addEventListener('click',function(){
@@ -24654,7 +24717,7 @@ window.IBFx={apply:apply,set:set,cur:cur};if(document.readyState==='loading')doc
       if(host){
         card=document.createElement('div');
         card.className='set-card';card.id='ib-csslab-card';card.style.marginTop='12px';
-        card.innerHTML='<div class="sc-t">CSS Lab — 聊天美化预设</div><p class="hint" style="margin:6px 0 10px">多套聊天界面 CSS 预设，随用随切；与聊天抽屉底部「CSS 美化」是同一份。</p><div class="cl-body"></div>';
+        card.innerHTML='<div class="sc-t">CSS Lab — 聊天美化预设</div><p class="hint" style="margin:6px 0 10px">多套聊天界面 CSS 预设，随用随切；与聊天抽屉底部「CSS 美化」是同一份。<br><span style="opacity:.55">构建：'+BUILD+'</span></p><div class="cl-body"></div>';
         host.appendChild(card);
       }
     }
