@@ -3605,9 +3605,21 @@ body.theme-infernal #cv-msgs .m.user{background:#0A84FF!important;color:#fff!imp
 #cv-msgs .mrow.cont{margin-top:0}
 #cv-msgs .mrow-head{margin-bottom:2px}
 /* 宽度上限只放在有确定宽度的 .m-body 上，内层不再互相用百分比套圈（修「1111」折行） */
-#cv-msgs .mrow .m-body{max-width:80%!important;min-width:0!important}
+#cv-msgs .mrow .m-body{max-width:88%!important;min-width:0!important}
+#cv-msgs .mrow.user .m-body{max-width:92%!important;margin-left:auto}
+#cv-msgs .mrow.ai .m-body{margin-right:auto}
 #cv-msgs .m-body .m-col{flex:1 1 auto!important;min-width:0!important;max-width:none!important}
 #cv-msgs .m-body>.m{max-width:100%!important}
+/* 无头像模式：去掉头像占位，气泡贴近屏幕边缘 */
+#cv-msgs .m-avaslot,#cv-msgs .m-ava{display:none!important}
+/* 时间戳与气泡同一水平线（不再垫在下面占高度） */
+#cv-msgs .m-col{flex-flow:row wrap;align-items:flex-end;gap:0 7px}
+#cv-msgs .mrow.user .m-col{flex-direction:row-reverse;justify-content:flex-start}
+#cv-msgs .m-time{flex:none;margin:0!important;font-size:0.62rem;line-height:1;padding-bottom:7px;color:var(--tx3)!important}
+#cv-msgs .m-col>.m+.m{flex-basis:100%}
+/* 行距再收紧 */
+#cv-msgs .mrow{margin-bottom:1px!important}
+#cv-msgs .mrow.cont{margin-top:0}
 /* --- 修打字卡顿：关掉输入栏/顶栏的 backdrop-filter 重绘 --- */
 #conv .cv-input.glass::before,#conv .cv-head.glass::before,#cv-selbar.glass::before{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
 #conv .cv-input.glass,#conv .cv-head.glass{background:rgba(250,250,252,0.96)}
